@@ -144,9 +144,9 @@ class ParseGroup(Vk):
     @staticmethod
     def _get_group_members_count(params: dict) -> int:
         params['fields'] = 'members_count'
-        js = requests.get("https://api.vk.com/method/groups.getById", params=params).json()
+        json_ = requests.get("https://api.vk.com/method/groups.getById", params=params).json()
         try:
-            members_count = js['response'][0]['members_count']
+            members_count = json_['response'][0]['members_count']
         except KeyError:
             return -1
         return members_count
@@ -174,6 +174,11 @@ class ParseGroup(Vk):
         #
 
         pass
+
+    def get_group_data(self, group) -> dict:
+        params={'v': 5.131, 'access_token': self.access_token, 'group_id': group}
+        json_ = requests.get("https://api.vk.com/method/groups.getById", params=params).json()
+        return json_
 
     def get_groups_members_count(self, groups: list) -> dict:
         """
@@ -325,14 +330,54 @@ class ParseGroup(Vk):
             'v': 5.131,
             'access_token': self.access_token,
             'owner_id': owner_id,
-            'count': count,
+            'count': 100,
             'offset': 0
         }
-        posts = requests.get(
-            "https://api.vk.com/method/wall.get",
-            params=params
-        ).json()
+        posts = list()
+        while len(posts) < count:
+            curr_posts_data = requests.get(
+                "https://api.vk.com/method/wall.get",
+                params=params
+            ).json()
+            try:
+                curr_posts = curr_posts_data['response']['items']
+            except KeyError:
+                print(curr_posts_data)
+                params['offset'] += 100
+                continue
+            posts.extend(curr_posts)
+            params['offset'] += 100
+            time.sleep(0.33)
         return posts
+
+    def get_post_comments(self, owner_id: int, post_id, count: int) -> dict:
+        params = {
+            'v': 5.131,
+            'access_token': self.access_token,
+            'owner_id': owner_id,
+            'post_id': post_id,
+            'count': 100,
+            'offset': 0
+        }
+        comments = []
+        prev_len = -1
+        while prev_len < len(comments):
+            prev_len = len(comments)
+            curr_comments_data = requests.get(
+                "https://api.vk.com/method/wall.getComments",
+                params=params
+            ).json()
+            try:
+                curr_comments = curr_comments_data['response']['items']
+            except KeyError:
+                print(curr_comments_data)
+                params['offset'] += 100
+                continue
+            comments.extend(curr_comments)
+            print(len(comments))
+            params['offset'] += 100
+            time.sleep(0.33)
+        return comments
 
     def get_user_page_data(self, user_ids: list, fields: list) -> dict:
         params = {
