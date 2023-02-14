@@ -10,7 +10,6 @@ from typing import Any, Dict, List
 class Vk(object):
     client_id = "2274003"
     client_secret = "hHbZxrka2uZ6jB1inYsH"
-    base_params = {}
 
     def __init__(self, username: str, password: str):
         self.username = username
