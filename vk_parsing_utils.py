@@ -64,7 +64,7 @@ class ParseUser(Vk):
         r = requests.get("https://api.vk.com/method/users.search/", params=self.base_params)
         return r.json()
 
-    def get_user_page_data(self, user_ids: list, fields=None) -> Any | None:
+    def get_user_page_data(self, user_ids: list, fields=None):
         """
         Получить информацию о пользователе
 
