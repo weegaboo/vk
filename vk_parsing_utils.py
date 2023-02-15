@@ -2,9 +2,8 @@ import requests
 import pickle
 import time
 
-# from IPython.display import clear_output
-from typing import Any, Dict, List
-# from tqdm import tqdm
+from typing import Any, Dict, List, Union, NoReturn, Callable
+from functools import wraps
 
 
 class Vk(object):
@@ -28,13 +27,22 @@ class Vk(object):
         r = requests.get("https://oauth.vk.com/token/", params=params)
         return r.json()
 
-    def _get_access_token(self):
+    def _get_access_token(self) -> Union[str, Dict]:
         """
         Получаем access_token
 
         """
         r = self._get_init()
         return r['access_token'] if 'access_token' in r.keys() else r
+
+    @staticmethod
+    def add_base_params(func) -> Callable:
+        @wraps(func)
+        def _wrapper(self, **kwargs):
+            kwargs.update(self.base_params)
+            data = func(self, **kwargs)
+            return data
+        return _wrapper
 
     @staticmethod
     def save(obj, name: str):
@@ -60,23 +68,18 @@ class ParseUser(Vk):
         super().__init__(username, password)
 
     def find_user(self, **kwargs) -> Dict:
-        self.base_params.update(kwargs)
-        r = requests.get("https://api.vk.com/method/users.search/", params=self.base_params)
+        kwargs.update(self.base_params)
+        r = requests.get("https://api.vk.com/method/users.search/", params=kwargs)
         return r.json()
 
-    def get_user_page_data(self, user_ids: list, fields=None):
+    def get_user_page_data(self, user_ids: str, fields: str = base_fields):
         """
         Получить информацию о пользователе
 
         """
-        if fields is None:
-            fields = self.base_fields
-        new_params = {
-            'user_ids': ', '.join(user_ids),
-            'fields': ', '.join(fields)
-        }
-        self.base_params.update(new_params)
-        r = requests.get("https://api.vk.com/method/users.get/", params=self.base_params)
+        variables = locals()
+        params = self._update_params(variables)
+        r = requests.get("https://api.vk.com/method/users.get/", params=params)
         try:
             request_data = r.json()
             data = request_data['response']
@@ -86,9 +89,9 @@ class ParseUser(Vk):
         return data
 
     def get_user_posts(self, owner_id: int, count=100) -> Dict:
-        new_params = {'owner_id': owner_id, 'count': count}
-        self.base_params.update(new_params)
-        posts = requests.get("https://api.vk.com/method/wall.get", params=self.base_params)
+        variables = locals()
+        params = self._update_params(variables)
+        posts = requests.get("https://api.vk.com/method/wall.get", params=params)
         return posts.json()
 
 
@@ -98,12 +101,37 @@ class ParseGroup(Vk):
     def __init__(self, username: str, password: str):
         super().__init__(username, password)
 
-    def get_group_posts(self, owner_id: int, count=100) -> List:
-        new_params = {'owner_id': owner_id, 'count': count, 'offset': 0}
-        self.base_params.update(new_params)
+    @Vk.add_base_params
+    def get_group_data(self, **params) -> Dict[str, List[Dict]]:
+        """
+        Parse group or groups data with groups.getById method
+        https://dev.vk.com/method/groups.getById
+
+
+        Parameters
+        ----------
+        Vk groups ids or domains (max value 500) with comma separation
+        group_ids: str
+
+        Vk group id or domain
+        group_id: str
+
+        List of additional fields to get (https://dev.vk.com/reference/objects/group)
+        fields: str
+
+        Returns
+        -------
+        data : Dict[List]
+
+        """
+        data = requests.get("https://api.vk.com/method/groups.getById", params=params).json()
+        return data
+
+    def get_group_posts(self, count: int = 100, **params) -> List:
+        params.update(self.base_params)
         posts = []
         while len(posts) < count:
-            curr_posts_data = requests.get("https://api.vk.com/method/wall.get", params=self.base_params).json()
+            curr_posts_data = requests.get("https://api.vk.com/method/wall.get", params=params).json()
             try:
                 curr_posts = curr_posts_data['response']['items']
                 posts.extend(curr_posts)
@@ -113,9 +141,25 @@ class ParseGroup(Vk):
             time.sleep(0.33)
         return posts
 
-    def get_post_comments(self, owner_id: int, post_id, count: int = 100) -> List:
-        new_params = {'owner_id': owner_id, 'post_id': post_id, 'count': count, 'offset': 0}
-        self.base_params.update(new_params)
+
+    def get_group_posts(self, owner_id: int, count: int = 100, offset: int = 0) -> List:
+        variables = locals()
+        params = self._update_params(variables)
+        posts = []
+        while len(posts) < count:
+            curr_posts_data = requests.get("https://api.vk.com/method/wall.get", params=Vk.base_params).json()
+            try:
+                curr_posts = curr_posts_data['response']['items']
+                posts.extend(curr_posts)
+            except KeyError:
+                print(curr_posts_data)
+            self.base_params['offset'] += 100
+            time.sleep(0.33)
+        return posts
+
+    def get_post_comments(self, owner_id: int, post_id, count: int = 100, offset: int = 0) -> List:
+        variables = locals()
+        params = self._update_params(variables)
         comments = []
         prev_len = -1
         while prev_len < len(comments):
