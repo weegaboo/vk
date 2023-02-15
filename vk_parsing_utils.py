@@ -68,7 +68,7 @@ class ParseUser(Vk):
         super().__init__(username, password)
 
     def find_user(self, **kwargs) -> Dict:
-        kwargs.update(self.base_params)
+        kwargs |= self.base_params
         r = requests.get("https://api.vk.com/method/users.search/", params=kwargs)
         return r.json()
 
@@ -96,7 +96,7 @@ class ParseUser(Vk):
 
 
 class ParseGroup(Vk):
-    """Парсинг данных из групп ВК"""
+    """Vk groups parsing"""
 
     def __init__(self, username: str, password: str):
         super().__init__(username, password)
@@ -104,16 +104,16 @@ class ParseGroup(Vk):
     @Vk.add_base_params
     def get_group_data(self, **params) -> Dict[str, List[Dict]]:
         """
-        Parse group or groups data with groups.getById method
+        Parse community data with groups.getById method
         https://dev.vk.com/method/groups.getById
 
 
         Parameters
         ----------
-        Vk groups ids or domains (max value 500) with comma separation
+        VK groups IDs or domains (max value 500) with comma separation
         group_ids: str
 
-        Vk group id or domain
+        VK group ID or domain
         group_id: str
 
         List of additional fields to get (https://dev.vk.com/reference/objects/group)
@@ -124,49 +124,79 @@ class ParseGroup(Vk):
         data : Dict[List]
 
         """
-        data = requests.get("https://api.vk.com/method/groups.getById", params=params).json()
-        return data
+        data = requests.get("https://api.vk.com/method/groups.getById", params=params)
+        return data.json()
 
-    def get_group_posts(self, count: int = 100, **params) -> List:
-        params.update(self.base_params)
+    @Vk.add_base_params
+    def get_group_posts(self, **params) -> List:
+        """
+        Parse community data with groups.getById method
+        https://dev.vk.com/method/groups.getById
+
+
+        Parameters
+        ----------
+        VK groups IDs or domains (max value 500) with comma separation
+        group_ids: str
+
+        VK group ID or domain
+        group_id: str
+
+        List of additional fields to get (https://dev.vk.com/reference/objects/group)
+        fields: str
+
+        Returns
+        -------
+        data : Dict[List]
+
+        """
         posts = []
-        while len(posts) < count:
+        while len(posts) < params['count']:
             curr_posts_data = requests.get("https://api.vk.com/method/wall.get", params=params).json()
             try:
                 curr_posts = curr_posts_data['response']['items']
                 posts.extend(curr_posts)
             except KeyError:
                 print(curr_posts_data)
-            self.base_params['offset'] += 100
+            params['offset'] += 100
             time.sleep(0.33)
         return posts
 
+    @Vk.add_base_params
+    def get_post_comments(self, **params) -> List:
+        """
+        Parse comments from post with wall.getComments method
+        https://dev.vk.com/method/groups.getById
 
-    def get_group_posts(self, owner_id: int, count: int = 100, offset: int = 0) -> List:
-        variables = locals()
-        params = self._update_params(variables)
-        posts = []
-        while len(posts) < count:
-            curr_posts_data = requests.get("https://api.vk.com/method/wall.get", params=Vk.base_params).json()
-            try:
-                curr_posts = curr_posts_data['response']['items']
-                posts.extend(curr_posts)
-            except KeyError:
-                print(curr_posts_data)
-            self.base_params['offset'] += 100
-            time.sleep(0.33)
-        return posts
 
-    def get_post_comments(self, owner_id: int, post_id, count: int = 100, offset: int = 0) -> List:
-        variables = locals()
-        params = self._update_params(variables)
+        Parameters
+        ----------
+        Owner id (user or community id). The community ID in the owner_id parameter must be specified with the "-" sign
+        for example, owner_id=-1 corresponds to the VKontakte API community ID (https://vk.com/apiclub)
+        owner_id: int
+
+        The id of the post on the wall.
+        post_id: int
+
+        Vk group id or domain
+        group_id: str
+
+        List of additional fields to get (https://dev.vk.com/reference/objects/group)
+        fields: str
+
+        Returns
+        -------
+        List with post comments
+        comments : List
+
+        """
         comments = []
         prev_len = -1
         while prev_len < len(comments):
             prev_len = len(comments)
             curr_comments_data = requests.get(
                 "https://api.vk.com/method/wall.getComments",
-                params=self.base_params
+                params=params
             ).json()
             try:
                 curr_comments = curr_comments_data['response']['items']
@@ -177,7 +207,6 @@ class ParseGroup(Vk):
             self.base_params['offset'] += 100
             time.sleep(0.33)
         return comments
-
 
 
     #
