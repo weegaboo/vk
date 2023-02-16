@@ -110,7 +110,7 @@ class ParseGroup(Vk):
 
         Parameters
         ----------
-        VK groups IDs or domains (max value 500) with comma separation
+        VK groups IDs or domains (max value 500). IDs should be with comma separation.
         group_ids: str
 
         VK group ID or domain
@@ -128,30 +128,46 @@ class ParseGroup(Vk):
         return data.json()
 
     @Vk.add_base_params
-    def get_group_posts(self, **params) -> List:
+    def get_posts(self, **params) -> List:
         """
-        Parse community data with groups.getById method
-        https://dev.vk.com/method/groups.getById
+        Parse posts with wall.get method
+        https://dev.vk.com/method/wall.get
 
 
         Parameters
         ----------
-        VK groups IDs or domains (max value 500) with comma separation
-        group_ids: str
+        ID of the user or community from whose wall you want to get posts.
+        ID should be with comma separation.
+        owner_id: int
 
-        VK group ID or domain
-        group_id: str
+        Short name of the user or group
+        domain: str
 
-        List of additional fields to get (https://dev.vk.com/reference/objects/group)
+        The offset required to select a specific subset of records.
+        offset: int (positive)
+
+        The number of records to be retrieved. Maximum value: 100.
+        count: int (positive)
+
+        1 — additional profiles and groups fields containing information about users and communities
+        will be returned in the response. By default: 0.
+        extended: int (checkbox 1 or 0)
+
+        List of additional fields to get.
+        Fields for users -- https://dev.vk.com/reference/objects/user
+        Fields for groups -- https://dev.vk.com/reference/objects/group
         fields: str
 
         Returns
         -------
+        Returns a list of posts from the user's or community's wall.
         data : Dict[List]
 
         """
-        posts = []
-        while len(posts) < params['count']:
+        data = {'count ': 0, 'items': []}
+        if params['extended']:
+            data.update({'profiles': [], 'groups': []})
+        while len(data['posts']) < params['count']:
             curr_posts_data = requests.get("https://api.vk.com/method/wall.get", params=params).json()
             try:
                 curr_posts = curr_posts_data['response']['items']
