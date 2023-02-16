@@ -1,9 +1,9 @@
-import requests
 import pickle
 import time
-
-from typing import Any, Dict, List, Union, NoReturn, Callable
 from functools import wraps
+from typing import Dict, List, Union, Callable
+
+import requests
 
 
 class Vk(object):
@@ -72,13 +72,12 @@ class ParseUser(Vk):
         r = requests.get("https://api.vk.com/method/users.search/", params=kwargs)
         return r.json()
 
-    def get_user_page_data(self, user_ids: str, fields: str = base_fields):
+    @Vk.add_base_params
+    def get_user_page_data(self, **params):
         """
         Получить информацию о пользователе
 
         """
-        variables = locals()
-        params = self._update_params(variables)
         r = requests.get("https://api.vk.com/method/users.get/", params=params)
         try:
             request_data = r.json()
@@ -88,9 +87,8 @@ class ParseUser(Vk):
             return None
         return data
 
-    def get_user_posts(self, owner_id: int, count=100) -> Dict:
-        variables = locals()
-        params = self._update_params(variables)
+    @Vk.add_base_params
+    def get_user_posts(self, **params) -> Dict:
         posts = requests.get("https://api.vk.com/method/wall.get", params=params)
         return posts.json()
 
@@ -128,7 +126,7 @@ class ParseGroup(Vk):
         return data.json()
 
     @Vk.add_base_params
-    def get_posts(self, **params) -> List:
+    def get_posts(self, extended: int = 0, **params) -> List:
         """
         Parse posts with wall.get method
         https://dev.vk.com/method/wall.get
@@ -140,7 +138,7 @@ class ParseGroup(Vk):
         ID should be with comma separation.
         owner_id: int
 
-        Short name of the user or group
+        Short name of the user or group. If domain is incorrect func will return your client posts
         domain: str
 
         The offset required to select a specific subset of records.
@@ -165,7 +163,7 @@ class ParseGroup(Vk):
 
         """
         data = {'count ': 0, 'items': []}
-        if params['extended']:
+        if extended:
             data.update({'profiles': [], 'groups': []})
         while len(data['posts']) < params['count']:
             curr_posts_data = requests.get("https://api.vk.com/method/wall.get", params=params).json()
