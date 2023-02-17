@@ -9,6 +9,14 @@ from typing import Dict, List, Union, Callable, Any, Optional
 class Vk(object):
     client_id = "2274003"
     client_secret = "hHbZxrka2uZ6jB1inYsH"
+    base_user_fields = [
+        'id', 'first_name', 'last_name',
+        'is_closed', 'about', 'activities',
+        'bdate', 'city', 'contacts',
+        'country', 'domain', 'has_photo',
+        'home_town', 'interests', 'personal',
+        'quotes', 'relation', 'sex', 'status'
+    ]
 
     def __init__(self, username: str, password: str):
         self.username = username
@@ -60,14 +68,6 @@ class ParseUser(Vk):
     Парсинг данных пользователей ВК
 
     """
-    base_fields = [
-        'id', 'first_name', 'last_name',
-        'is_closed', 'about', 'activities',
-        'bdate', 'city', 'contacts',
-        'country', 'domain', 'has_photo',
-        'home_town', 'interests', 'personal',
-        'quotes', 'relation', 'sex', 'status'
-    ]
 
     def __init__(self, username: str, password: str):
         super().__init__(username, password)
@@ -130,7 +130,7 @@ class ParseGroup(Vk):
         data = requests.get("https://api.vk.com/method/groups.getById", params=params)
         return data.json()
 
-    @Vk.add_base_params(count=100, offset=0)
+    @Vk.add_base_params(count=100, offset=0, fields=Vk.base_user_fields)
     def get_posts(self, count2load: int, extended: int = 0, **params) -> Dict[str, Union[Optional[List[Any]], Any]]:
         """
         Parse posts with wall.get method
@@ -146,10 +146,10 @@ class ParseGroup(Vk):
         Short name of the user or group. If domain is incorrect func will return your client posts
         domain: str
 
-        Additional params:
-
-        The number of records to be retrieved
+        The number of posts to load
         count2load: int (positive)
+
+        Additional params:
 
         The offset required to select a specific subset of records.
         offset: int (positive)
