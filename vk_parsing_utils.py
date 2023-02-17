@@ -2,6 +2,7 @@ import requests
 import pickle
 import time
 
+from tqdm import tqdm
 from functools import wraps
 from typing import Dict, List, Union, Callable, Any, Optional
 
@@ -104,12 +105,11 @@ class ParseGroup(Vk):
     def __init__(self, username: str, password: str):
         super().__init__(username, password)
 
-    @Vk.add_base_params()
+    @Vk.add_base_params(fields='members_count')
     def get_group_data(self, **params) -> Dict[str, List[Dict]]:
         """
         Parse community data with groups.getById method
         https://dev.vk.com/method/groups.getById
-
 
         Parameters
         ----------
@@ -130,12 +130,36 @@ class ParseGroup(Vk):
         data = requests.get("https://api.vk.com/method/groups.getById", params=params)
         return data.json()
 
+    @Vk.add_base_params(count=1)
+    def get_posts_amount(self, **params):
+        """
+        Get posts amount
+
+        Parameters
+        ----------
+        Owner id (user or community id). The community ID in the owner_id parameter must be specified with the "-" sign
+        for example, owner_id=-1 corresponds to the VKontakte API community ID (https://vk.com/apiclub).
+        owner_id: int
+
+        Short name of the user or group. If domain is incorrect func will return your client posts.
+        domain: str
+
+        Returns
+        -------
+        Amount.
+        amount : int
+        """
+        request = requests.get("https://api.vk.com/method/wall.get", params=params).json()
+        try:
+            return request['response']['count']
+        except KeyError:
+            return request
+
     @Vk.add_base_params(count=100, offset=0, fields=', '.join(Vk.base_user_fields))
     def get_posts(self, count2load: int, extended: int = 0, **params) -> Dict[str, Union[Optional[List[Any]], Any]]:
         """
         Parse posts with wall.get method
         https://dev.vk.com/method/wall.get
-
 
         Parameters
         ----------
@@ -169,12 +193,18 @@ class ParseGroup(Vk):
         data : Dict[str, Union[Optional[List[Any]], Any]]
 
         """
-        data = {'total_count': 0, 'loaded_count': 0, 'items': []}
+        if 'owner_id' in params.keys():
+            id_ = {'owner_id': params['owner_id']}
+        else:
+            id_ = {'domain': params['domain']}
+        total_count = self.get_posts_amount(**id_)
+        data = {'total_count': total_count, 'loaded_count': 0, 'items': []}
         if extended:
             data |= {'profiles': [], 'groups': []}
             params['extended'] = 1
-        posts_amount = -1
-        while posts_amount < count2load and posts_amount < data['total_count']:
+        pbar = tqdm(total=total_count)
+        posts_amount = 0
+        while posts_amount < count2load and posts_amount < total_count:
             request = requests.get("https://api.vk.com/method/wall.get", params=params).json()
             try:
                 curr_data = request['response']
@@ -187,7 +217,9 @@ class ParseGroup(Vk):
                 print(request)
             params['offset'] += 100
             time.sleep(0.33)
+            pbar.update(len(data['items']) - posts_amount)
             posts_amount = len(data['items'])
+        pbar.close()
         data['loaded_count'] = posts_amount
         return data
 
