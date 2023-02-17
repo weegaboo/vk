@@ -202,9 +202,9 @@ class ParseGroup(Vk):
         if extended:
             data |= {'profiles': [], 'groups': []}
             params['extended'] = 1
-        pbar = tqdm(total=total_count)
-        posts_amount = 0
-        while posts_amount < count2load and posts_amount < total_count:
+        steps = min(count2load, total_count)
+        pbar = tqdm(total=steps)
+        while data['loaded_count'] < count2load and data['loaded_count'] < total_count:
             request = requests.get("https://api.vk.com/method/wall.get", params=params).json()
             try:
                 curr_data = request['response']
@@ -217,14 +217,38 @@ class ParseGroup(Vk):
                 print(request)
             params['offset'] += 100
             time.sleep(0.33)
-            pbar.update(len(data['items']) - posts_amount)
-            posts_amount = len(data['items'])
+            pbar.update(len(data['items']) - data['loaded_count'])
+            data['loaded_count'] = len(data['items'])
         pbar.close()
-        data['loaded_count'] = posts_amount
         return data
 
+    @Vk.add_base_params(count=1)
+    def get_comments_amount(self, **params):
+        """
+        Get comments amount
+
+        Parameters
+        ----------
+        Owner id (user or community id). The community ID in the owner_id parameter must be specified with the "-" sign
+        for example, owner_id=-1 corresponds to the VKontakte API community ID (https://vk.com/apiclub).
+        owner_id: int
+
+        Short name of the user or group. If domain is incorrect func will return your client posts.
+        domain: str
+
+        Returns
+        -------
+        Amount.
+        amount : int
+        """
+        request = requests.get("https://api.vk.com/method/wall.getComments", params=params).json()
+        try:
+            return request['response']['count']
+        except KeyError:
+            return request
+
     @Vk.add_base_params(count=100, offset=0, fields=', '.join(Vk.base_user_fields))
-    def get_comments(self, **params) -> List:
+    def get_comments(self, **params) -> Dict[str, Any]:
         """
         Parse comments from post with wall.getComments method
         https://dev.vk.com/method/wall.getComments
@@ -264,27 +288,26 @@ class ParseGroup(Vk):
 
         Returns
         -------
-        List with post comments
-        comments : List
+        Comments data
+        data : Dict[str, Any]
 
         """
-        comments = []
-        prev_len = -1
-        while prev_len < len(comments):
-            prev_len = len(comments)
-            curr_comments_data = requests.get(
-                "https://api.vk.com/method/wall.getComments",
-                params=params
-            ).json()
+        total_count = self.get_comments_amount(owner_id=params['owner_id'], post_id=params['post_id'])
+        data = {'total_count': total_count, 'loaded_count': 0, 'items': []}
+        pbar = tqdm(total=total_count)
+        while data['loaded_count'] < total_count:
+            request = requests.get("https://api.vk.com/method/wall.getComments", params=params).json()
             try:
-                curr_comments = curr_comments_data['response']['items']
-                comments.extend(curr_comments)
-                print(len(comments))
+                curr_data = request['response']
+                data['items'].extend(curr_data['items'])
+                print(len(curr_data['items']))
             except KeyError:
-                print(curr_comments_data)
-            self.base_params['offset'] += 100
+                print(request)
+            params['offset'] += 100
             time.sleep(0.33)
-        return comments
+            pbar.update(len(data['items']) - data['loaded_count'])
+            data['loaded_count'] = len(data['items'])
+        return data
 
 
     #
