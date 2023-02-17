@@ -48,7 +48,7 @@ class Vk(object):
         def decorator(func) -> Callable:
             @wraps(func)
             def _wrapper(self, **kwargs):
-                kwargs.update(self.base_params)
+                kwargs |= self.base_params
                 for param, value in params.items():
                     if param not in kwargs:
                         kwargs[param] = value
@@ -130,7 +130,7 @@ class ParseGroup(Vk):
         data = requests.get("https://api.vk.com/method/groups.getById", params=params)
         return data.json()
 
-    @Vk.add_base_params(count=100, offset=0, fields=Vk.base_user_fields)
+    @Vk.add_base_params(count=100, offset=0, fields=', '.join(Vk.base_user_fields))
     def get_posts(self, count2load: int, extended: int = 0, **params) -> Dict[str, Union[Optional[List[Any]], Any]]:
         """
         Parse posts with wall.get method
@@ -139,8 +139,8 @@ class ParseGroup(Vk):
 
         Parameters
         ----------
-        ID of the user or community from whose wall you want to get posts.
-        ID should be with comma separation.
+        Owner id (user or community id). The community ID in the owner_id parameter must be specified with the "-" sign
+        for example, owner_id=-1 corresponds to the VKontakte API community ID (https://vk.com/apiclub)
         owner_id: int
 
         Short name of the user or group. If domain is incorrect func will return your client posts
@@ -158,10 +158,10 @@ class ParseGroup(Vk):
         will be returned in the response. By default: 0.
         extended: int (checkbox 1 or 0)
 
-        List of additional fields to get.
+        Only if extended=1.  Returns list of additional fields to get.
         Fields for users -- https://dev.vk.com/reference/objects/user
         Fields for groups -- https://dev.vk.com/reference/objects/group
-        fields: str
+        fields: str ()
 
         Returns
         -------
@@ -171,7 +171,7 @@ class ParseGroup(Vk):
         """
         data = {'total_count': 0, 'loaded_count': 0, 'items': []}
         if extended:
-            data.update({'profiles': [], 'groups': []})
+            data |= {'profiles': [], 'groups': []}
             params['extended'] = 1
         posts_amount = -1
         while posts_amount < count2load and posts_amount < data['total_count']:
@@ -191,24 +191,41 @@ class ParseGroup(Vk):
         data['loaded_count'] = posts_amount
         return data
 
-    @Vk.add_base_params()
-    def get_post_comments(self, **params) -> List:
+    @Vk.add_base_params(count=100, offset=0, fields=', '.join(Vk.base_user_fields))
+    def get_comments(self, **params) -> List:
         """
         Parse comments from post with wall.getComments method
-        https://dev.vk.com/method/groups.getById
+        https://dev.vk.com/method/wall.getComments
 
 
         Parameters
         ----------
         Owner id (user or community id). The community ID in the owner_id parameter must be specified with the "-" sign
-        for example, owner_id=-1 corresponds to the VKontakte API community ID (https://vk.com/apiclub)
+        for example, owner_id=-1 corresponds to the VKontakte API community ID (https://vk.com/apiclub).
         owner_id: int
 
-        The id of the post on the wall.
+        Post ID.
         post_id: int
 
-        Vk group id or domain
-        group_id: str
+        Additional params:
+
+        1 — return information about likes.
+        need_likes: int (checkbox 1 or 0)
+
+        The number of comments to be received. Default: 100.
+        count: int (positive)
+
+        The offset required to select a specific subset of records.
+        offset: int (positive)
+
+        Sort order of comments. Possible values:
+        'asc' -- from old to new;
+        'desc' -- from new to old.
+        sort: str
+
+        1 — additional profiles and groups fields containing information
+        about users and communities will be returned. By default, it is 0.
+        extended: int (checkbox 1 or 0)
 
         List of additional fields to get (https://dev.vk.com/reference/objects/group)
         fields: str
