@@ -1,9 +1,9 @@
+import requests
 import pickle
 import time
+
 from functools import wraps
 from typing import Dict, List, Union, Callable
-
-import requests
 
 
 class Vk(object):
