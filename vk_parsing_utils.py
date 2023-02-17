@@ -41,7 +41,9 @@ class Vk(object):
             @wraps(func)
             def _wrapper(self, **kwargs):
                 kwargs.update(self.base_params)
-                kwargs.update(params)
+                for param, value in params.items():
+                    if param not in kwargs:
+                        kwargs[param] = value
                 data = func(self, **kwargs)
                 return data
             return _wrapper
@@ -146,8 +148,8 @@ class ParseGroup(Vk):
 
         Additional params:
 
-        The number of records to be retrieved. Maximum value: 100.
-        count: int (positive)
+        The number of records to be retrieved
+        count2load: int (positive)
 
         The offset required to select a specific subset of records.
         offset: int (positive)
