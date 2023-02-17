@@ -3,7 +3,7 @@ import pickle
 import time
 
 from functools import wraps
-from typing import Dict, List, Union, Callable
+from typing import Dict, List, Union, Callable, Any, Optional
 
 
 class Vk(object):
@@ -36,13 +36,16 @@ class Vk(object):
         return r['access_token'] if 'access_token' in r.keys() else r
 
     @staticmethod
-    def add_base_params(func) -> Callable:
-        @wraps(func)
-        def _wrapper(self, **kwargs):
-            kwargs.update(self.base_params)
-            data = func(self, **kwargs)
-            return data
-        return _wrapper
+    def add_base_params(**params):
+        def decorator(func) -> Callable:
+            @wraps(func)
+            def _wrapper(self, **kwargs):
+                kwargs.update(self.base_params)
+                kwargs.update(params)
+                data = func(self, **kwargs)
+                return data
+            return _wrapper
+        return decorator
 
     @staticmethod
     def save(obj, name: str):
@@ -72,7 +75,7 @@ class ParseUser(Vk):
         r = requests.get("https://api.vk.com/method/users.search/", params=kwargs)
         return r.json()
 
-    @Vk.add_base_params
+    @Vk.add_base_params()
     def get_user_page_data(self, **params):
         """
         Получить информацию о пользователе
@@ -87,7 +90,7 @@ class ParseUser(Vk):
             return None
         return data
 
-    @Vk.add_base_params
+    @Vk.add_base_params()
     def get_user_posts(self, **params) -> Dict:
         posts = requests.get("https://api.vk.com/method/wall.get", params=params)
         return posts.json()
@@ -99,7 +102,7 @@ class ParseGroup(Vk):
     def __init__(self, username: str, password: str):
         super().__init__(username, password)
 
-    @Vk.add_base_params
+    @Vk.add_base_params()
     def get_group_data(self, **params) -> Dict[str, List[Dict]]:
         """
         Parse community data with groups.getById method
@@ -125,8 +128,8 @@ class ParseGroup(Vk):
         data = requests.get("https://api.vk.com/method/groups.getById", params=params)
         return data.json()
 
-    @Vk.add_base_params
-    def get_posts(self, extended: int = 0, **params) -> List:
+    @Vk.add_base_params(count=100, offset=0)
+    def get_posts(self, count2load: int, extended: int = 0, **params) -> Dict[str, Union[Optional[List[Any]], Any]]:
         """
         Parse posts with wall.get method
         https://dev.vk.com/method/wall.get
@@ -141,11 +144,13 @@ class ParseGroup(Vk):
         Short name of the user or group. If domain is incorrect func will return your client posts
         domain: str
 
-        The offset required to select a specific subset of records.
-        offset: int (positive)
+        Additional params:
 
         The number of records to be retrieved. Maximum value: 100.
         count: int (positive)
+
+        The offset required to select a specific subset of records.
+        offset: int (positive)
 
         1 — additional profiles and groups fields containing information about users and communities
         will be returned in the response. By default: 0.
@@ -159,24 +164,32 @@ class ParseGroup(Vk):
         Returns
         -------
         Returns a list of posts from the user's or community's wall.
-        data : Dict[List]
+        data : Dict[str, Union[Optional[List[Any]], Any]]
 
         """
-        data = {'count ': 0, 'items': []}
+        data = {'total_count': 0, 'loaded_count': 0, 'items': []}
         if extended:
             data.update({'profiles': [], 'groups': []})
-        while len(data['posts']) < params['count']:
-            curr_posts_data = requests.get("https://api.vk.com/method/wall.get", params=params).json()
+            params['extended'] = 1
+        posts_amount = -1
+        while posts_amount < count2load and posts_amount < data['total_count']:
+            request = requests.get("https://api.vk.com/method/wall.get", params=params).json()
             try:
-                curr_posts = curr_posts_data['response']['items']
-                posts.extend(curr_posts)
+                curr_data = request['response']
+                data['total_count'] = curr_data['count']
+                data['items'].extend(curr_data['items'])
+                if extended:
+                    data['profiles'].extend(curr_data['profiles'])
+                    data['groups'].extend(curr_data['groups'])
             except KeyError:
-                print(curr_posts_data)
+                print(request)
             params['offset'] += 100
             time.sleep(0.33)
-        return posts
+            posts_amount = len(data['items'])
+        data['loaded_count'] = posts_amount
+        return data
 
-    @Vk.add_base_params
+    @Vk.add_base_params()
     def get_post_comments(self, **params) -> List:
         """
         Parse comments from post with wall.getComments method
