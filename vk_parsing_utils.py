@@ -155,8 +155,8 @@ class ParseGroup(Vk):
         except KeyError:
             return request
 
-    @Vk.add_base_params(count=100, offset=0, fields=', '.join(Vk.base_user_fields))
-    def get_posts(self, count2load: int, extended: int = 0, **params) -> Dict[str, Union[Optional[List[Any]], Any]]:
+    @Vk.add_base_params(count=100, offset=0, fields=', '.join(Vk.base_user_fields), extended=0)
+    def get_posts(self, count2load: int, **params) -> Dict[str, Union[Optional[List[Any]], Any]]:
         """
         Parse posts with wall.get method
         https://dev.vk.com/method/wall.get
@@ -170,7 +170,7 @@ class ParseGroup(Vk):
         Short name of the user or group. If domain is incorrect func will return your client posts
         domain: str
 
-        The number of posts to load
+        The number of posts to load. 
         count2load: int (positive)
 
         Additional params:
@@ -199,9 +199,8 @@ class ParseGroup(Vk):
             id_ = {'domain': params['domain']}
         total_count = self.get_posts_amount(**id_)
         data = {'total_count': total_count, 'loaded_count': 0, 'items': []}
-        if extended:
+        if params['extended']:
             data |= {'profiles': [], 'groups': []}
-            params['extended'] = 1
         steps = min(count2load, total_count)
         pbar = tqdm(total=steps)
         while data['loaded_count'] < count2load and data['loaded_count'] < total_count:
@@ -210,7 +209,7 @@ class ParseGroup(Vk):
                 curr_data = request['response']
                 data['total_count'] = curr_data['count']
                 data['items'].extend(curr_data['items'])
-                if extended:
+                if params['extended']:
                     data['profiles'].extend(curr_data['profiles'])
                     data['groups'].extend(curr_data['groups'])
             except KeyError:
@@ -247,8 +246,8 @@ class ParseGroup(Vk):
         except KeyError:
             return request
 
-    @Vk.add_base_params(count=100, offset=0, fields=', '.join(Vk.base_user_fields))
-    def get_comments(self, **params) -> Dict[str, Any]:
+    @Vk.add_base_params(count=100, offset=0, fields=', '.join(Vk.base_user_fields), extended=1)
+    def get_comments(self, count2load: int = None, **params) -> Dict[str, Any]:
         """
         Parse comments from post with wall.getComments method
         https://dev.vk.com/method/wall.getComments
@@ -265,6 +264,9 @@ class ParseGroup(Vk):
 
         Additional params:
 
+        Number of comments required to upload. if None -> load all comments.
+        count2load: int
+
         1 — return information about likes.
         need_likes: int (checkbox 1 or 0)
 
@@ -280,10 +282,13 @@ class ParseGroup(Vk):
         sort: str
 
         1 — additional profiles and groups fields containing information
-        about users and communities will be returned. By default, it is 0.
+        about users and communities will be returned. Here, by default, it is 1.
         extended: int (checkbox 1 or 0)
 
-        List of additional fields to get (https://dev.vk.com/reference/objects/group)
+        Only if extended=1:
+        List of additional fields to get
+        1) Group: https://dev.vk.com/reference/objects/group
+        2) User: https://dev.vk.com/reference/objects/user
         fields: str
 
         Returns
@@ -292,15 +297,22 @@ class ParseGroup(Vk):
         data : Dict[str, Any]
 
         """
-        total_count = self.get_comments_amount(owner_id=params['owner_id'], post_id=params['post_id'])
-        data = {'total_count': total_count, 'loaded_count': 0, 'items': []}
-        pbar = tqdm(total=total_count)
-        while data['loaded_count'] < total_count:
+        if count2load is None:
+            count2load = self.get_comments_amount(owner_id=params['owner_id'], post_id=params['post_id'])
+        data = {'total_count': count2load, 'loaded_count': 0, 'items': []}
+        if params['extended']:
+            data |= {'profiles': [], 'groups': []}
+        pbar = tqdm(total=count2load)
+        while data['loaded_count'] < count2load:
             request = requests.get("https://api.vk.com/method/wall.getComments", params=params).json()
             try:
                 curr_data = request['response']
+                if not len(curr_data['items']):
+                    break
                 data['items'].extend(curr_data['items'])
-                print(len(curr_data['items']))
+                if params['extended']:
+                    data['profiles'].extend(curr_data['profiles'])
+                    data['groups'].extend(curr_data['groups'])
             except KeyError:
                 print(request)
             params['offset'] += 100
