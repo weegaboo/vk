@@ -4,6 +4,7 @@ import time
 
 from tqdm import tqdm
 from functools import wraps
+from datetime import datetime
 from typing import Dict, List, Union, Callable, Any, Optional
 
 
@@ -155,14 +156,24 @@ class ParseGroup(Vk):
         except KeyError:
             return request
 
+    @staticmethod
+    def _cut_posts_by_date(posts: List[Dict], start_date: datetime) -> Dict:
+        for post in posts:
+            date = datetime.utcfromtimestamp(post['date'])
+            if start_date <= date:
+                yield post
+
     @Vk.add_base_params(count=100, offset=0, fields=', '.join(Vk.base_user_fields), extended=0)
-    def get_posts(self, count2load: int, **params) -> Dict[str, Union[Optional[List[Any]], Any]]:
+    def get_posts(self, start_date: datetime, count2load: int = None, **params) -> Dict[str, Union[Optional[List[Any]], Any]]:
         """
         Parse posts with wall.get method
         https://dev.vk.com/method/wall.get
 
         Parameters
         ----------
+        Date until which posts will be collected (Include start date posts).
+        start_date: datetime
+
         Owner id (user or community id). The community ID in the owner_id parameter must be specified with the "-" sign
         for example, owner_id=-1 corresponds to the VKontakte API community ID (https://vk.com/apiclub)
         owner_id: int
@@ -170,7 +181,7 @@ class ParseGroup(Vk):
         Short name of the user or group. If domain is incorrect func will return your client posts
         domain: str
 
-        The number of posts to load. 
+        The number of posts to load (total posts count by default)
         count2load: int (positive)
 
         Additional params:
@@ -198,6 +209,8 @@ class ParseGroup(Vk):
         else:
             id_ = {'domain': params['domain']}
         total_count = self.get_posts_amount(**id_)
+        if count2load is None:
+            count2load = total_count
         data = {'total_count': total_count, 'loaded_count': 0, 'items': []}
         if params['extended']:
             data |= {'profiles': [], 'groups': []}
@@ -218,6 +231,11 @@ class ParseGroup(Vk):
             time.sleep(0.33)
             pbar.update(len(data['items']) - data['loaded_count'])
             data['loaded_count'] = len(data['items'])
+            last_post_date = datetime.utcfromtimestamp(data['items'][-1]['date'])
+            if last_post_date < start_date:
+                data['items'] = list(self._cut_posts_by_date(data['items'], start_date))
+                pbar.update(steps)
+                break
         pbar.close()
         return data
 
@@ -241,6 +259,7 @@ class ParseGroup(Vk):
         amount : int
         """
         request = requests.get("https://api.vk.com/method/wall.getComments", params=params).json()
+        time.sleep(0.33)
         try:
             return request['response']['count']
         except KeyError:
@@ -302,7 +321,8 @@ class ParseGroup(Vk):
         data = {'total_count': count2load, 'loaded_count': 0, 'items': []}
         if params['extended']:
             data |= {'profiles': [], 'groups': []}
-        pbar = tqdm(total=count2load)
+        if isinstance(count2load, dict):
+            print(count2load)
         while data['loaded_count'] < count2load:
             request = requests.get("https://api.vk.com/method/wall.getComments", params=params).json()
             try:
@@ -317,7 +337,6 @@ class ParseGroup(Vk):
                 print(request)
             params['offset'] += 100
             time.sleep(0.33)
-            pbar.update(len(data['items']) - data['loaded_count'])
             data['loaded_count'] = len(data['items'])
         return data
 
