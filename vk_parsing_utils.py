@@ -64,6 +64,12 @@ class Vk(object):
         with open(f'{name}.pickle', 'wb') as f:
             pickle.dump(obj, f)
 
+    @staticmethod
+    def open_pickle(path: str):
+        with open(path, 'rb') as f:
+            obj = pickle.load(f)
+        return obj
+
 
 class ParseUser(Vk):
     """
