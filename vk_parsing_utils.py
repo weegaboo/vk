@@ -135,7 +135,6 @@ class ParseGroup(Vk):
 
         """
         data = requests.get("https://api.vk.com/method/groups.getById", params=params)
-        print(params)
         return data.json()
 
     @Vk.add_base_params(count=1)
@@ -349,7 +348,7 @@ class ParseGroup(Vk):
 
     @Vk.add_base_params(count=1000, offset=0)
     def get_likes(self, owner_id: int, post_id: int) -> Dict[str, Any]:
-        
+
         pass
     #
     #
