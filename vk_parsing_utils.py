@@ -210,7 +210,7 @@ class ParseGroup(Vk):
         data : Dict[str, Union[Optional[List[Any]], Any]]
 
         """
-        if 'owner_id' in params.keys():
+        if 'owner_id' in params:
             id_ = {'owner_id': params['owner_id']}
         else:
             id_ = {'domain': params['domain']}
