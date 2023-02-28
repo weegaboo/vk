@@ -1,4 +1,5 @@
 import requests
+import warnings
 import pickle
 import time
 
@@ -96,7 +97,7 @@ class ParseUser(Vk):
             request_data = r.json()
             data = request_data['response']
         except Exception as e:
-            print(f'{e}: {r}')
+            warnings.warn(f'{e}: {r}')
             return None
         return data
 
@@ -165,9 +166,12 @@ class ParseGroup(Vk):
     @staticmethod
     def _cut_posts_by_date(posts: List[Dict], start_date: datetime) -> Dict:
         for post in posts:
-            date = datetime.utcfromtimestamp(post['date'])
-            if start_date <= date:
-                yield post
+            try:
+                date = datetime.utcfromtimestamp(post['date'])
+                if start_date <= date:
+                    yield post
+            except KeyError:
+                warnings.warn(f"KeyError, owner_id: {post['owner_id']}, post_id: {post['id']}")
 
     @Vk.add_base_params(count=100, offset=0, fields=', '.join(Vk.base_user_fields), extended=0)
     def get_posts(self, start_date: datetime, count2load: int = None, **params) -> Dict[str, Union[Optional[List[Any]], Any]]:
@@ -232,7 +236,7 @@ class ParseGroup(Vk):
                     data['profiles'].extend(curr_data['profiles'])
                     data['groups'].extend(curr_data['groups'])
             except KeyError:
-                print(request)
+                warnings.warn(f'KeyError: {request}')
             params['offset'] += 100
             time.sleep(0.33)
             pbar.update(len(data['items']) - data['loaded_count'])
@@ -328,7 +332,7 @@ class ParseGroup(Vk):
         if params['extended']:
             data |= {'profiles': [], 'groups': []}
         if isinstance(count2load, dict):
-            print(count2load)
+            warnings.warn(f'{count2load}')
         while data['loaded_count'] < count2load:
             request = requests.get("https://api.vk.com/method/wall.getComments", params=params).json()
             try:
