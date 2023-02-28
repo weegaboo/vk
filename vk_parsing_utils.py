@@ -15,7 +15,7 @@ class Vk(object):
     base_user_fields = [
         'id', 'first_name', 'last_name',
         'is_closed', 'about', 'activities',
-        'bdate', 'city', 'contacts',
+        'bdate', 'city', 'contacts', 'followers_count',
         'country', 'domain', 'has_photo',
         'home_town', 'interests', 'personal',
         'quotes', 'relation', 'sex', 'status'
@@ -88,25 +88,51 @@ class ParseUser(Vk):
         r = requests.get("https://api.vk.com/method/users.search/", params=kwargs)
         return r.json()
 
-    @Vk.add_base_params()
-    def get_user_page_data(self, **params):
+    @Vk.add_base_params(fields=', '.join(Vk.base_user_fields))
+    def get_page_data(self, **params) -> List:
         """
         Получить информацию о пользователе
 
         """
         r = requests.get("https://api.vk.com/method/users.get/", params=params)
+        data = []
         try:
             request_data = r.json()
             data = request_data['response']
         except Exception as e:
             warnings.warn(f'{e}: {r}')
-            return None
         return data
 
     @Vk.add_base_params()
     def get_user_posts(self, **params) -> Dict:
         posts = requests.get("https://api.vk.com/method/wall.get", params=params)
         return posts.json()
+
+    @Vk.add_base_params(count=1000, offset=0, fields=', '.join(Vk.base_user_fields))
+    def get_followers(self, **params) -> Dict[str, Any]:
+        page_data = self.get_page_data(user_ids=params['user_id'])
+        data = {
+            'total_count': page_data[0]['followers_count'],
+            'loaded_count': 0,
+            'members': []
+        }
+        pbar = tqdm(total=data['total_count'])
+        while data['loaded_count'] < data['total_count']:
+            request = requests.get("https://api.vk.com/method/users.getFollowers/", params=params).json()
+            try:
+                curr_data = request['response']
+                data['members'].extend(curr_data['items'])
+            except KeyError:
+                warnings.warn(f"KeyError: {request}")
+            params['offset'] += params['count']
+            time.sleep(self.time)
+            increase = len(data['members']) - data['loaded_count']
+            if not increase:
+                break
+            pbar.update(increase)
+            data['loaded_count'] = len(data['members'])
+        pbar.close()
+        return data
 
 
 class ParseGroup(Vk):
