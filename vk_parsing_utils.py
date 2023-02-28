@@ -20,12 +20,14 @@ class Vk(object):
         'home_town', 'interests', 'personal',
         'quotes', 'relation', 'sex', 'status'
     ]
+    time = 0.33
+    version = 5.131
 
     def __init__(self, username: str, password: str):
         self.username = username
         self.password = password
         self.access_token = self._get_access_token()
-        self.base_params = {'v': 5.131, 'access_token': self.access_token}
+        self.base_params = {'v': self.version, 'access_token': self.access_token}
 
     def _get_init(self):
         params = {
@@ -237,8 +239,8 @@ class ParseGroup(Vk):
                     data['groups'].extend(curr_data['groups'])
             except KeyError:
                 warnings.warn(f'KeyError: {request}')
-            params['offset'] += 100
-            time.sleep(0.33)
+            params['offset'] += params['count']
+            time.sleep(self.time)
             pbar.update(len(data['items']) - data['loaded_count'])
             data['loaded_count'] = len(data['items'])
             last_post_date = datetime.utcfromtimestamp(data['items'][-1]['date'])
@@ -269,7 +271,7 @@ class ParseGroup(Vk):
         amount : int
         """
         request = requests.get("https://api.vk.com/method/wall.getComments", params=params).json()
-        time.sleep(0.33)
+        time.sleep(self.time)
         try:
             return request['response']['count']
         except KeyError:
@@ -344,16 +346,51 @@ class ParseGroup(Vk):
                     data['profiles'].extend(curr_data['profiles'])
                     data['groups'].extend(curr_data['groups'])
             except KeyError:
-                print(request)
-            params['offset'] += 100
-            time.sleep(0.33)
+                warnings.warn(f"KeyError: {request}")
+            params['offset'] += params['count']
+            time.sleep(self.time)
             data['loaded_count'] = len(data['items'])
         return data
 
     @Vk.add_base_params(count=1000, offset=0)
-    def get_likes(self, owner_id: int, post_id: int) -> Dict[str, Any]:
+    def get_likes(self, **params) -> Dict[str, Any]:
 
         pass
+
+    @Vk.add_base_params(fields='members_count')
+    def get_members_count(self, **params) -> int:
+        request = requests.get("https://api.vk.com/method/groups.getById", params=params).json()
+        try:
+            members_count = request['response'][0]['members_count']
+        except KeyError:
+            warnings.warn(f"KeyError: {request}")
+            members_count = -1
+        return members_count
+
+    @Vk.add_base_params(count=1000, offset=0, fields=', '.join(Vk.base_user_fields))
+    def get_members(self, **params) -> Dict[str, Any]:
+        data = {
+            'total_count': self.get_members_count(group_id=params['group_id']),
+            'loaded_count': 0,
+            'members': []
+        }
+        pbar = tqdm(total=data['total_count'])
+        while data['loaded_count'] < data['total_count']:
+            request = requests.get("https://api.vk.com/method/groups.getMembers/", params=params).json()
+            try:
+                curr_data = request['response']
+                data['members'].extend(curr_data['items'])
+            except KeyError:
+                warnings.warn(f"KeyError: {request}")
+            params['offset'] += params['count']
+            time.sleep(self.time)
+            increase = len(data['members']) - data['loaded_count']
+            if not increase:
+                break
+            pbar.update(increase)
+            data['loaded_count'] = len(data['members'])
+        pbar.close()
+        return data
     #
     #
     #
@@ -537,19 +574,6 @@ class ParseGroup(Vk):
     #
     #
     #
-    # def get_group_posts(self, owner_id: int, count=100) -> dict:
-    #     params = {
-    #         'v': 5.131,
-    #         'access_token': self.access_token,
-    #         'owner_id': owner_id,
-    #         'count': count,
-    #         'offset': 0
-    #     }
-    #     posts = requests.get(
-    #         "https://api.vk.com/method/wall.get",
-    #         params=params
-    #     ).json()
-    #     return posts
     #
     # def get_user_page_data(self, user_ids: list, fields: list) -> dict:
     #     params = {
