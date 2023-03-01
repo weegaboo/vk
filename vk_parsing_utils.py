@@ -9,6 +9,15 @@ from datetime import datetime
 from typing import Dict, List, Union, Callable, Any, Optional
 
 
+class VkError(Exception):
+    def __init__(self, error_code: int, error_msg: str):
+        self.error_code = error_code
+        self.error_msg = error_msg
+
+    def __str__(self):
+        return f"Error {self.error_code} {self.error_msg}"
+
+
 class Vk(object):
     client_id = "2274003"
     client_secret = "hHbZxrka2uZ6jB1inYsH"
@@ -47,6 +56,14 @@ class Vk(object):
         """
         r = self._get_init()
         return r['access_token'] if 'access_token' in r.keys() else r
+
+    @staticmethod
+    def make_request(method: str, params: Dict) -> Dict:
+        request = requests.get(f"https://api.vk.com/method/{method}", params=params).json()
+        if 'error' in request:
+            error = request['error']
+            raise VkError(error['error_code'], error['error_msg'])
+        return request
 
     @staticmethod
     def add_base_params(**params):
@@ -163,8 +180,8 @@ class ParseGroup(Vk):
         data : Dict[List]
 
         """
-        data = requests.get("https://api.vk.com/method/groups.getById", params=params)
-        return data.json()
+        request = self.make_request("groups.getById", params)
+        return request
 
     @Vk.add_base_params(count=1)
     def get_posts_amount(self, **params):
@@ -185,11 +202,8 @@ class ParseGroup(Vk):
         Amount.
         amount : int
         """
-        request = requests.get("https://api.vk.com/method/wall.get", params=params).json()
-        try:
-            return request['response']['count']
-        except KeyError:
-            return request
+        request = self.make_request("wall.get", params)
+        return request['response']['count']
 
     @staticmethod
     def _cut_posts_by_date(posts: List[Dict], start_date: datetime) -> Dict:
@@ -199,7 +213,7 @@ class ParseGroup(Vk):
                 if start_date <= date:
                     yield post
             except KeyError:
-                warnings.warn(f"KeyError, owner_id: {post['owner_id']}, post_id: {post['id']}")
+                warnings.warn(f"KeyError, post: {post}")
 
     @Vk.add_base_params(count=100, offset=0, fields=', '.join(Vk.base_user_fields), extended=0)
     def get_posts(self, start_date: datetime, count2load: int = None, **params) -> Dict[str, Union[Optional[List[Any]], Any]]:
@@ -255,16 +269,13 @@ class ParseGroup(Vk):
         steps = min(count2load, total_count)
         pbar = tqdm(total=steps)
         while data['loaded_count'] < count2load and data['loaded_count'] < total_count:
-            request = requests.get("https://api.vk.com/method/wall.get", params=params).json()
-            try:
-                curr_data = request['response']
-                data['total_count'] = curr_data['count']
-                data['items'].extend(curr_data['items'])
-                if params['extended']:
-                    data['profiles'].extend(curr_data['profiles'])
-                    data['groups'].extend(curr_data['groups'])
-            except KeyError:
-                warnings.warn(f'KeyError: {request}')
+            request = self.make_request("wall.get", params)
+            curr_data = request['response']
+            data['total_count'] = curr_data['count']
+            data['items'].extend(curr_data['items'])
+            if params['extended']:
+                data['profiles'].extend(curr_data['profiles'])
+                data['groups'].extend(curr_data['groups'])
             params['offset'] += params['count']
             time.sleep(self.time)
             pbar.update(len(data['items']) - data['loaded_count'])
@@ -296,12 +307,9 @@ class ParseGroup(Vk):
         Amount.
         amount : int
         """
-        request = requests.get("https://api.vk.com/method/wall.getComments", params=params).json()
+        request = self.make_request("wall.getComments", params)
         time.sleep(self.time)
-        try:
-            return request['response']['count']
-        except KeyError:
-            return request
+        return request['response']['count']
 
     @Vk.add_base_params(count=100, offset=0, fields=', '.join(Vk.base_user_fields), extended=1)
     def get_comments(self, count2load: int = None, **params) -> Dict[str, Any]:
@@ -362,17 +370,17 @@ class ParseGroup(Vk):
         if isinstance(count2load, dict):
             warnings.warn(f'{count2load}')
         while data['loaded_count'] < count2load:
-            request = requests.get("https://api.vk.com/method/wall.getComments", params=params).json()
             try:
-                curr_data = request['response']
-                if not len(curr_data['items']):
-                    break
-                data['items'].extend(curr_data['items'])
-                if params['extended']:
-                    data['profiles'].extend(curr_data['profiles'])
-                    data['groups'].extend(curr_data['groups'])
-            except KeyError:
-                warnings.warn(f"KeyError: {request}")
+                request = self.make_request("wall.getComments", params)
+            except VkError:
+                return data
+            curr_data = request['response']
+            if not len(curr_data['items']):
+                return data
+            data['items'].extend(curr_data['items'])
+            if params['extended']:
+                data['profiles'].extend(curr_data['profiles'])
+                data['groups'].extend(curr_data['groups'])
             params['offset'] += params['count']
             time.sleep(self.time)
             data['loaded_count'] = len(data['items'])
@@ -380,21 +388,88 @@ class ParseGroup(Vk):
 
     @Vk.add_base_params(count=1000, offset=0)
     def get_likes(self, **params) -> Dict[str, Any]:
+        """
+
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+
+        """
 
         pass
 
     @Vk.add_base_params(fields='members_count')
     def get_members_count(self, **params) -> int:
-        request = requests.get("https://api.vk.com/method/groups.getById", params=params).json()
-        try:
-            members_count = request['response'][0]['members_count']
-        except KeyError:
-            warnings.warn(f"KeyError: {request}")
-            members_count = -1
-        return members_count
+        """
+        Returns members count
+        https://dev.vk.com/method/groups.getById
+
+
+        Parameters
+        ----------
+        Community identifiers or short names. The maximum number of identifiers is 500.
+        group_ids: str
+
+        Community identifier or short name.
+        group_id: str
+
+        Returns
+        -------
+        Comments data
+        members_count : int
+
+        """
+        request = self.make_request("groups.getById", params)
+        return request['response'][0]['members_count']
 
     @Vk.add_base_params(count=1000, offset=0, fields=', '.join(Vk.base_user_fields))
     def get_members(self, **params) -> Dict[str, Any]:
+        """
+        Returns a list of community members.
+        https://dev.vk.com/method/groups.getMembers
+
+
+        Parameters
+        ----------
+        Community ID or short name.
+        group_id: str
+
+
+        Additional params
+        ----------
+        The sort with which to return the list of members. Can take values:
+        • 'id_asc' - in ascending order of ID;
+        • 'id_desc' - in descending order of ID;
+        • 'time_asc' - in chronological order by joining the community;
+        • 'time_desc' - in anti-chronological order by joining the community.
+        Sorting by time_asc and time_desc is only possible when called by a community moderator.
+        sort: str
+
+        The bias required to sample a specific subset of participants. The default is 0.
+        offset: int (positive)
+
+        The number of community members to get information about. Default: 1000.
+        count: int (positive)
+
+        List of additional fields to get https://dev.vk.com/reference/objects/user
+        fields: str
+
+        • 'friends' - Only friends in this community will be returned.
+        • 'unsure' - Users who selected "Maybe going" will be returned (if the community is an event).
+        • 'managers' - Only community leaders will be returned (available when requested by passing
+          an access_token on behalf of a community administrator).
+        • 'donut' - only donuts will be returned (users who have a paid VK Donut subscription).
+        filter: str
+
+        Returns
+        -------
+        Comments data
+        data : Dict[str, Any]
+
+        """
         data = {
             'total_count': self.get_members_count(group_id=params['group_id']),
             'loaded_count': 0,
@@ -402,12 +477,9 @@ class ParseGroup(Vk):
         }
         pbar = tqdm(total=data['total_count'])
         while data['loaded_count'] < data['total_count']:
-            request = requests.get("https://api.vk.com/method/groups.getMembers/", params=params).json()
-            try:
-                curr_data = request['response']
-                data['members'].extend(curr_data['items'])
-            except KeyError:
-                warnings.warn(f"KeyError: {request}")
+            request = self.make_request("groups.getMembers", params)
+            curr_data = request['response']
+            data['members'].extend(curr_data['items'])
             params['offset'] += params['count']
             time.sleep(self.time)
             increase = len(data['members']) - data['loaded_count']
