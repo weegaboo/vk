@@ -239,6 +239,26 @@ class Wall(Base):
 
     @Base.add_base_params(fields=', '.join(Base.base_user_fields), extended=1)
     def get_comment(self, **params) -> Dict[str, Any]:
+        """
+        Gets information about comment
+
+        Parameters
+        ----------
+        The ID of the owner of the wall (for communities — with a minus sign).
+        owner_id: int
+
+        ID of the comment.
+        comment_id: int
+
+        1 - Additional profile and group fields containing information
+        about users and communities will be returned in the response. By default: 0.
+        extended: int (checkbox)
+
+        List of additional fields for profiles and communities to return.
+        Please note that this parameter is taken into account only when extended=1.
+        fields: str (with comma sep)
+
+        """
         return self.api_request("wall.getComment", params)
 
     @Base.add_base_params(count=100, offset=0, fields=', '.join(Base.base_user_fields), extended=1)
