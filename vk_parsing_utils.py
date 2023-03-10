@@ -18,6 +18,11 @@ class VKError(Exception):
         return f"Error {self.error_code} {self.error_msg}"
 
 
+class NotIncreaseError(Exception):
+    def __str__(self):
+        return "Current items are empty (no data or no increase)!"
+
+
 class Base(object):
     client_id = "2274003"
     client_secret = "hHbZxrka2uZ6jB1inYsH"
@@ -57,16 +62,16 @@ class Base(object):
         request = self._get_init()
         return request['access_token'] if 'access_token' in request.keys() else request
 
-    @staticmethod
-    def api_request(method: str, params: Dict) -> Dict:
+    def api_request(self, method: str, params: Dict) -> Dict:
         request = requests.get(f"https://api.vk.com/method/{method}", params=params).json()
+        time.sleep(self.time)
         if 'error' in request:
             error = request['error']
             raise VKError(error['error_code'], error['error_msg'])
         response = request['response']
         if 'items' in response:
             if not len(response['items']):
-                raise VKError(0, 'My Error: current items are empty (no data or no increase)!')
+                raise NotIncreaseError
         return response
 
     @staticmethod
@@ -197,7 +202,6 @@ class Wall(Base):
                 data['profiles'].extend(curr_data['profiles'])
                 data['groups'].extend(curr_data['groups'])
             params['offset'] += params['count']
-            time.sleep(self.time)
             pbar.update(len(data['items']) - data['loaded_count'])
             data['loaded_count'] = len(data['items'])
             last_post_date = datetime.utcfromtimestamp(data['items'][-1]['date'])
@@ -231,8 +235,11 @@ class Wall(Base):
         amount : int
         """
         request = self.api_request("wall.getComments", params)
-        time.sleep(self.time)
         return request['count']
+
+    @Base.add_base_params(fields=', '.join(Base.base_user_fields), extended=1)
+    def get_comment(self, **params) -> Dict[str, Any]:
+        return self.api_request("wall.getComment", params)
 
     @Base.add_base_params(count=100, offset=0, fields=', '.join(Base.base_user_fields), extended=1)
     def get_comments(self, count2load: int = None, **params) -> Dict[str, Any]:
@@ -302,7 +309,6 @@ class Wall(Base):
                 data['profiles'].extend(curr_data['profiles'])
                 data['groups'].extend(curr_data['groups'])
             params['offset'] += params['count']
-            time.sleep(self.time)
             data['loaded_count'] = len(data['items'])
         return data
 
@@ -370,7 +376,6 @@ class Likes(Base):
             data['items'].extend(curr_data['items'])
             data['loaded_count'] += len(curr_data['items'])
             params['offset'] += params['count']
-            time.sleep(self.time)
         return data
 
 
@@ -389,8 +394,7 @@ class User(Wall, Likes):
         Найти пользователя
 
         """
-        data = self.api_request("users.search", params)
-        return data
+        return self.api_request("users.search", params)
 
     @Base.add_base_params(fields=', '.join(Base.base_user_fields))
     def get_page_data(self, **params) -> Dict:
@@ -398,8 +402,7 @@ class User(Wall, Likes):
         Получить информацию о пользователе
 
         """
-        data = self.api_request("users.get", params)
-        return data
+        return self.api_request("users.get", params)
 
     @Base.add_base_params(count=1000, offset=0, fields=', '.join(Base.base_user_fields))
     def get_followers(self, **params) -> Dict[str, Any]:
@@ -421,15 +424,16 @@ class User(Wall, Likes):
         }
         pbar = tqdm(total=data['total_count'])
         while data['loaded_count'] < data['total_count']:
-            curr_data = self.api_request("users.getFollowers", params)
+            try:
+                curr_data = self.api_request("users.getFollowers", params)
+            except NotIncreaseError:
+                pbar.close()
+                return data
+            data['loaded_count'] = len(data['members'])
             data['members'].extend(curr_data['items'])
             params['offset'] += params['count']
-            time.sleep(self.time)
             increase = len(data['members']) - data['loaded_count']
-            if not increase:
-                break
             pbar.update(increase)
-            data['loaded_count'] = len(data['members'])
         pbar.close()
         return data
 
@@ -462,8 +466,7 @@ class Group(Wall, Likes):
         data : Dict[List]
 
         """
-        request = self.api_request("groups.getById", params)
-        return request
+        return self.api_request("groups.getById", params)
 
     @Base.add_base_params(fields='members_count')
     def get_members_count(self, **params) -> int:
@@ -541,15 +544,16 @@ class Group(Wall, Likes):
         }
         pbar = tqdm(total=data['total_count'])
         while data['loaded_count'] < data['total_count']:
-            curr_data = self.api_request("groups.getMembers", params)
+            try:
+                curr_data = self.api_request("groups.getMembers", params)
+            except NotIncreaseError:
+                pbar.close()
+                return data
             data['members'].extend(curr_data['items'])
-            params['offset'] += params['count']
-            time.sleep(self.time)
-            increase = len(data['members']) - data['loaded_count']
-            if not increase:
-                break
-            pbar.update(increase)
             data['loaded_count'] = len(data['members'])
+            params['offset'] += params['count']
+            increase = len(data['members']) - data['loaded_count']
+            pbar.update(increase)
         pbar.close()
         return data
 
