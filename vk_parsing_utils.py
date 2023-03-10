@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Dict, List, Union, Callable, Any, Optional
 
 
-class VkError(Exception):
+class VKError(Exception):
     def __init__(self, error_code: int, error_msg: str):
         self.error_code = error_code
         self.error_msg = error_msg
@@ -18,7 +18,7 @@ class VkError(Exception):
         return f"Error {self.error_code} {self.error_msg}"
 
 
-class Vk(object):
+class Base(object):
     client_id = "2274003"
     client_secret = "hHbZxrka2uZ6jB1inYsH"
     base_user_fields = [
@@ -62,8 +62,12 @@ class Vk(object):
         request = requests.get(f"https://api.vk.com/method/{method}", params=params).json()
         if 'error' in request:
             error = request['error']
-            raise VkError(error['error_code'], error['error_msg'])
-        return request['response']
+            raise VKError(error['error_code'], error['error_msg'])
+        response = request['response']
+        if 'items' in response:
+            if not len(response['items']):
+                raise VKError(0, 'My Error: current items are empty (no data or no increase)!')
+        return response
 
     @staticmethod
     def add_base_params(**params):
@@ -91,7 +95,7 @@ class Vk(object):
         return obj
 
 
-class Wall(Vk):
+class Wall(Base):
     """
     Methods for parsing a groups or users wall
 
@@ -110,7 +114,7 @@ class Wall(Vk):
             except KeyError:
                 warnings.warn(f"KeyError, post: {post}")
 
-    @Vk.add_base_params(count=1)
+    @Base.add_base_params(count=1)
     def get_posts_amount(self, **params):
         """
         Get posts amount
@@ -132,7 +136,7 @@ class Wall(Vk):
         request = self.api_request("wall.get", params)
         return request['count']
 
-    @Vk.add_base_params(count=100, offset=0, fields=', '.join(Vk.base_user_fields), extended=0)
+    @Base.add_base_params(count=100, offset=0, fields=', '.join(Base.base_user_fields), extended=0)
     def get_posts(self, start_date: datetime, count2load: int = None, **params) -> Dict[str, Any]:
         """
         Parse posts with wall.get method
@@ -204,7 +208,7 @@ class Wall(Vk):
         pbar.close()
         return data
 
-    @Vk.add_base_params(count=1)
+    @Base.add_base_params(count=1)
     def get_comments_amount(self, **params):
         """
         Get comments amount
@@ -230,7 +234,7 @@ class Wall(Vk):
         time.sleep(self.time)
         return request['count']
 
-    @Vk.add_base_params(count=100, offset=0, fields=', '.join(Vk.base_user_fields), extended=1)
+    @Base.add_base_params(count=100, offset=0, fields=', '.join(Base.base_user_fields), extended=1)
     def get_comments(self, count2load: int = None, **params) -> Dict[str, Any]:
         """
         Parse comments from post with wall.getComments method
@@ -291,9 +295,7 @@ class Wall(Vk):
         while data['loaded_count'] < count2load:
             try:
                 curr_data = self.api_request("wall.getComments", params)
-            except VkError:
-                return data
-            if not len(curr_data['items']):
+            except VKError:
                 return data
             data['items'].extend(curr_data['items'])
             if params['extended']:
@@ -305,30 +307,65 @@ class Wall(Vk):
         return data
 
 
-class Likes(Vk):
+class Likes(Base):
 
     def __init__(self, username: str, password: str):
         super().__init__(username, password)
 
-    @Vk.add_base_params(count=1000, offset=0, extended=1)
-    def get_likes(self, total_count: int, **params) -> Dict[str, Any]:
+    @Base.add_base_params(count=1000, offset=0, extended=1)
+    def get_likes(self, count2load: int = 0, **params) -> Dict[str, Any]:
         """
-
+        The method gets a list of IDs of users who have marked the specified object with a "Like" mark.
 
         Parameters
         ----------
+        Likes count2load. By default, 0.
+        count2load: int
+
+        The type of the object. Possible types:
+        • post — an entry on the user's or community's wall.
+        • post_ads — advertising record.
+        • comment — a comment on the entry on the wall.
+        • photo — photo.
+        • video — video recording.
+        • note — a note.
+        • market — product.
+        • photo_comment — comment on the photo.
+        • video_comment — comment on the video.
+        • topic_comment — comment in the discussion.
+        • market_comment — product comment.
+        • sitepage — the page of the site where the "Like" widget is installed.
+        type: str
+
+        ID of the object owner:
+        • User ID, if the object belongs to the user.
+        • Community ID (with a minus sign) if the object belongs to the community.
+        • Application ID, if the type parameter has the value site page.
+        owner_id: int
+
+        The ID of the object.
+        item_id: int
+
+        Information about whether to return extended information. Possible values:
+        • 1 — return extended information about users and communities from the list
+         of those who have marked "Like" or shared an entry.
+        • 0 — return only user and community IDs.
+        By default, 0.
+        extended: int (checkbox)
+
 
         Returns
         -------
+        data: Dict[str, Any]
 
         """
 
         data = {
-            'total_count': total_count,
-            'loaded_count': 0,
+            'count2load': count2load,
+            'loaded_count': -1,
             'items': []
         }
-        while data['loaded_count'] < data['total_count']:
+        while data['loaded_count'] < data['count2load']:
             curr_data = self.api_request("likes.getList", params)
             data['items'].extend(curr_data['items'])
             data['loaded_count'] += len(curr_data['items'])
@@ -346,7 +383,7 @@ class User(Wall, Likes):
     def __init__(self, username: str, password: str):
         super().__init__(username, password)
 
-    @Vk.add_base_params()
+    @Base.add_base_params()
     def find_user(self, **params) -> Dict:
         """
         Найти пользователя
@@ -355,7 +392,7 @@ class User(Wall, Likes):
         data = self.api_request("users.search", params)
         return data
 
-    @Vk.add_base_params(fields=', '.join(Vk.base_user_fields))
+    @Base.add_base_params(fields=', '.join(Base.base_user_fields))
     def get_page_data(self, **params) -> Dict:
         """
         Получить информацию о пользователе
@@ -364,7 +401,7 @@ class User(Wall, Likes):
         data = self.api_request("users.get", params)
         return data
 
-    @Vk.add_base_params(count=1000, offset=0, fields=', '.join(Vk.base_user_fields))
+    @Base.add_base_params(count=1000, offset=0, fields=', '.join(Base.base_user_fields))
     def get_followers(self, **params) -> Dict[str, Any]:
         """
 
@@ -403,7 +440,7 @@ class Group(Wall, Likes):
     def __init__(self, username: str, password: str):
         super().__init__(username, password)
 
-    @Vk.add_base_params(fields='members_count')
+    @Base.add_base_params(fields='members_count')
     def get_group_data(self, **params) -> Dict[str, List[Dict]]:
         """
         Parse community data with groups.getById method
@@ -428,7 +465,7 @@ class Group(Wall, Likes):
         request = self.api_request("groups.getById", params)
         return request
 
-    @Vk.add_base_params(fields='members_count')
+    @Base.add_base_params(fields='members_count')
     def get_members_count(self, **params) -> int:
         """
         Returns members count
@@ -452,7 +489,7 @@ class Group(Wall, Likes):
         request = self.api_request("groups.getById", params)
         return request[0]['members_count']
 
-    @Vk.add_base_params(count=1000, offset=0, fields=', '.join(Vk.base_user_fields))
+    @Base.add_base_params(count=1000, offset=0, fields=', '.join(Base.base_user_fields))
     def get_members(self, **params) -> Dict[str, Any]:
         """
         Returns a list of community members.
@@ -515,263 +552,9 @@ class Group(Wall, Likes):
             data['loaded_count'] = len(data['members'])
         pbar.close()
         return data
-    #
-    #
-    #
-    #
-    # @staticmethod
-    # def _get_group_members_count(params: dict) -> int:
-    #     params['fields'] = 'members_count'
-    #     js = requests.get("https://api.vk.com/method/groups.getById", params=params).json()
-    #     try:
-    #         members_count = js['response'][0]['members_count']
-    #     except KeyError:
-    #         return -1
-    #     return members_count
-    #
-    # def _get_groups_members_count(self, groups: list):
-    #     self.groups_members_count = {}
-    #     for group in tqdm(groups):
-    #         params = {'v': 5.131, 'access_token': self.access_token, 'group_id': group}
-    #         self.groups_members_count[group] = self._get_group_members_count(params=params)
-    #         time.sleep(0.3)
-    #
-    # def get_comments(self, group_domain: str):
-    #     # params={
-    #     #     'v': 5.131,
-    #     #     'access_token': self.access_token,
-    #     #     'domain': group_domain,
-    #     #     'offset': 0,
-    #     #     'count': 100
-    #     # }
-    #     # while
-    #     #     r = requests.get(
-    #     #         "https://api.vk.com/method/wall.get/",
-    #     #         params=params
-    #     #     )
-    #     #
-    #
-    #     pass
-    #
-    # def get_groups_members_count(self, groups: list) -> dict:
-    #     """
-    #     Кол-во участников в группе
-    #     На вход подается список доменов групп
-    #     На выходе словарь {домен: кол-во}
-    #
-    #     """
-    #     groups_members_count = dict()
-    #     for group in tqdm(groups):
-    #         params={'v': 5.131, 'access_token': self.access_token, 'group_id': group}
-    #         groups_members_count[group] = self._get_group_members_count(params=params)
-    #         time.sleep(0.3)
-    #     return groups_members_count
-    #
-    # def _sort_groups_by_members_count(self, groups: list):
-    #     self._get_groups_members_count(groups)
-    #     groups_sorted = sorted(self.groups_members_count, key=self.groups_members_count.get)
-    #     self.groups = list()
-    #     for group in groups_sorted:
-    #         if 0 < self.groups_members_count[group]:
-    #             self.groups.append(group)
-    #
-    # def _extend_multiple_lists(self, lst: list) -> list:
-    #     result = []
-    #     for inner_lst in lst:
-    #         result.extend(inner_lst)
-    #     return result
-    #
-    # def _delete_key(self, d, key):
-    #     if key in d.keys():
-    #         del d[key]
-    #
-    # def parse_group(self, params: dict) -> list:
-    #     """
-    #     Генератор
-    #     Парсинг данных группы с определенным набором параметров
-    #
-    #     """
-    #     params['offset'] = 0
-    #     params['count'] = 1000
-    #     group_name = params['group_id']
-    #     members_count = 1
-    #     while params['offset'] < members_count:
-    #         r = requests.get(
-    #             "https://api.vk.com/method/groups.getMembers/",
-    #             params=params
-    #         )
-    #         try:
-    #             r = r.json()
-    #         except Exception as e:
-    #             # self.err_logs.append(('Error', r))
-    #             print(f'err: {e}')
-    #             params['offset'] += params['count']
-    #             continue
-    #         try:
-    #             members_count = r['response']['count']
-    #             users_data = r['response']['items']
-    #             if not users_data:
-    #                 return
-    #             yield users_data
-    #         except KeyError:
-    #             self.err_logs.append(('KeyError', r))
-    #             print(r)
-    #             return
-    #         params['offset'] += params['count']
-    #         clear_output(wait=True)
-    #         time.sleep(1)
-    #         if members_count < params['offset']:
-    #             print(f'members_count: {members_count}')
-    #         print(f'процесс: {round(params["offset"] / members_count * 100, 2)}')
-    #         print(f'members_count: {members_count}')
-    #
-    # def parse_groups(self, groups: list, fields: list, save_threshold: int = 1e-4):
-    #     """
-    #     Парсинг данных групп с определенным набором параметров fields
-    #
-    #     """
-    #     self.groups = groups
-    #     params = {
-    #         'v': 5.131,
-    #         'access_token': self.access_token,
-    #         'fields': ', '.join(fields)
-    #     }
-    #     for group in tqdm(self.groups):
-    #         if group[:4] == 'club' and group[4:].isdigit():
-    #             params['group_id'] = group[4:]
-    #         elif group[:6] == 'public' and group[6:].isdigit():
-    #             params['group_id'] = group[6:]
-    #         else:
-    #             params['group_id'] = group
-    #             # if members_threshold < self.groups_members_count[group]:
-    #             #     continue
-    #         group_members = self._extend_multiple_lists(
-    #             list(
-    #                 self.parse_group(params)
-    #             )
-    #         )
-    #         self.groups_data[group] = group_members
-    #         if save_threshold < len(self.groups_data[group]):
-    #             self.save(self.groups_data, 'groups_data')
-    #         time.sleep(1)
-    #
-    #
-    # def parse_page_followers(self, user_id, fields):
-    #     params = {
-    #         'v': 5.131,
-    #         'access_token': self.access_token,
-    #         'fields': ', '.join(fields),
-    #         'user_id': user_id
-    #     }
-    #     params['offset'] = 0
-    #     params['count'] = 1000
-    #     members_count = 1
-    #     while params['offset'] < members_count:
-    #         r = requests.get(
-    #             "https://api.vk.com/method/users.getFollowers/",
-    #             params=params
-    #         )
-    #         try:
-    #             r = r.json()
-    #         except Exception as e:
-    #             # self.err_logs.append(('Error', r))
-    #             print(f'err: {e}')
-    #             params['offset'] += params['count']
-    #             continue
-    #         try:
-    #             members_count = r['response']['count']
-    #             users_data = r['response']['items']
-    #             if not users_data:
-    #                 return
-    #             yield users_data
-    #         except KeyError:
-    #             self.err_logs.append(('KeyError', r))
-    #             print(r)
-    #             return
-    #         params['offset'] += params['count']
-    #         clear_output(wait=True)
-    #         time.sleep(1)
-    #         if members_count < params['offset']:
-    #             print(f'members_count: {members_count}')
-    #         print(f'процесс: {round(params["offset"] / members_count * 100, 2)}')
-    #         print(f'members_count: {members_count}')
-    #
-    #
-    #
-    #
-    # def get_user_page_data(self, user_ids: list, fields: list) -> dict:
-    #     params = {
-    #         'v': 5.131,
-    #         'user_ids': ', '.join(user_ids),
-    #         'access_token': self.access_token,
-    #         'fields': ', '.join(fields)
-    #     }
-    #     r = requests.get(
-    #         "https://api.vk.com/method/users.get/",
-    #         params=params
-    #     )
-    #     try:
-    #         request_data = r.json()
-    #     except Exception as e:
-    #         # self.err_logs.append(('Error', r))
-    #         print(f'err: {r}')
-    #         return None
-    #     try:
-    #         data = request_data['response']
-    #     except KeyError:
-    #         print(request_data)
-    #         return None
-    #     return data
-    #
-    # def get_user_groups(self, user_id: str) -> dict:
-    #     params = {
-    #         'v': 5.131,
-    #         'user_id': user_id,
-    #         'access_token': self.access_token,
-    #         'extended': 1,
-    #         'count': 200
-    #     }
-    #     r = requests.get(
-    #         "https://api.vk.com/method/users.getSubscriptions/",
-    #         params=params
-    #     )
-    #     try:
-    #         r = r.json()
-    #     except Exception as e:
-    #         # self.err_logs.append(('Error', r))
-    #         print(f'err: {e}')
-    #         return None
-    #     return r
-    #
-    # def get_users_info(self, user_ids: list, fields: list) -> dict:
-    #     users_data = self.get_user_page_data(user_ids, fields)
-    #     for user_data in tqdm(users_data):
-    #         try:
-    #             if user_data['is_closed']:
-    #                 continue
-    #         except Exception as e:
-    #             pass
-    #         groups_data = self.get_user_groups(user_data['id'])
-    #         groups = list()
-    #         try:
-    #             items = groups_data['response']['items']
-    #         except Exception as e:
-    #             print(groups_data)
-    #             continue
-    #         for group in groups_data['response']['items']:
-    #             if 'screen_name' in group.keys():
-    #                 groups.append(group['screen_name'])
-    #             else:
-    #                 groups.append(group['id'])
-    #         user_data['groups'] = groups
-    #     return users_data
-    #
-    # def find_user(self, *args, **kwargs) -> dict:
-    #     params = kwargs
-    #     params['access_token'] = self.access_token
-    #     params['v'] = 5.131
-    #     r = requests.get(
-    #         "https://api.vk.com/method/users.search/",
-    #         params=params
-    #     ).json()
-    #     return r
+
+
+class VK(User, Group):
+
+    def __init__(self, username: str, password: str):
+        super().__init__(username, password)
