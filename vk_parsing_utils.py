@@ -10,12 +10,12 @@ from typing import Dict, List, Union, Callable, Any, Optional
 
 
 class VKError(Exception):
-    def __init__(self, error_code: int, error_msg: str):
-        self.error_code = error_code
-        self.error_msg = error_msg
+    def __init__(self, code: int, text: str):
+        self.code = code
+        self.text = text
 
     def __str__(self):
-        return f"Error {self.error_code} {self.error_msg}"
+        return f"Error {self.code} {self.text}"
 
 
 class NotIncreaseError(Exception):
@@ -71,7 +71,7 @@ class Base(object):
         response = request['response']
         if 'items' in response:
             if not len(response['items']):
-                raise NotIncreaseError
+                raise NotIncreaseError()
         return response
 
     @staticmethod
@@ -234,8 +234,12 @@ class Wall(Base):
         Amount.
         amount : int
         """
-        request = self.api_request("wall.getComments", params)
-        return request['count']
+        try:
+            request = self.api_request("wall.getComments", params)
+            count = request['count']
+        except NotIncreaseError as e:
+            count = 0
+        return count
 
     @Base.add_base_params(fields=', '.join(Base.base_user_fields), extended=1)
     def get_comment(self, **params) -> Dict[str, Any]:
@@ -251,7 +255,7 @@ class Wall(Base):
         comment_id: int
 
         1 - Additional profile and group fields containing information
-        about users and communities will be returned in the response. By default: 0.
+        about users and communities will be returned in the response. By default: 1.
         extended: int (checkbox)
 
         List of additional fields for profiles and communities to return.
@@ -317,12 +321,10 @@ class Wall(Base):
         data = {'total_count': count2load, 'loaded_count': 0, 'items': []}
         if params['extended']:
             data |= {'profiles': [], 'groups': []}
-        if isinstance(count2load, dict):
-            warnings.warn(f'{count2load}')
         while data['loaded_count'] < count2load:
             try:
                 curr_data = self.api_request("wall.getComments", params)
-            except VKError:
+            except (VKError, NotIncreaseError):
                 return data
             data['items'].extend(curr_data['items'])
             if params['extended']:
