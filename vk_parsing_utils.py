@@ -324,7 +324,7 @@ class Wall(Base):
         while data['loaded_count'] < count2load:
             try:
                 curr_data = self.api_request("wall.getComments", params)
-            except (VKError, NotIncreaseError):
+            except (VKError, NotIncreaseError, ConnectionResetError):
                 return data
             data['items'].extend(curr_data['items'])
             if params['extended']:
