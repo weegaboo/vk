@@ -378,7 +378,7 @@ class Likes(Base):
         • 1 — return extended information about users and communities from the list
          of those who have marked "Like" or shared an entry.
         • 0 — return only user and community IDs.
-        By default, 0.
+        By default, 1.
         extended: int (checkbox)
 
 
@@ -394,7 +394,10 @@ class Likes(Base):
             'items': []
         }
         while data['loaded_count'] < data['count2load']:
-            curr_data = self.api_request("likes.getList", params)
+            try:
+                curr_data = self.api_request("likes.getList", params)
+            except NotIncreaseError:
+                return data
             data['items'].extend(curr_data['items'])
             data['loaded_count'] += len(curr_data['items'])
             params['offset'] += params['count']
