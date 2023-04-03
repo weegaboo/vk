@@ -43,14 +43,14 @@ class Base(object):
         self.access_token = self._get_access_token()
         self.base_params = {'v': self.version, 'access_token': self.access_token}
 
-    def _get_init(self):
+    def _get_init(self, **add):
         params = {
             'grant_type': 'password',
             'client_id': self.client_id,
             'client_secret': self.client_secret,
             'username': self.username,
-            'password': self.password
-        }
+            'password': self.password,
+        } | add
         request = requests.get("https://oauth.vk.com/token/", params=params)
         return request.json()
 
@@ -69,9 +69,8 @@ class Base(object):
             error = request['error']
             raise VKError(error['error_code'], error['error_msg'])
         response = request['response']
-        if 'items' in response:
-            if not len(response['items']):
-                raise NotIncreaseError()
+        if 'items' in response and not len(response['items']):
+            raise NotIncreaseError()
         return response
 
     @staticmethod
@@ -142,7 +141,7 @@ class Wall(Base):
         return request['count']
 
     @Base.add_base_params(count=100, offset=0, fields=', '.join(Base.base_user_fields), extended=0)
-    def get_posts(self, start_date: datetime, count2load: int = None, **params) -> Dict[str, Any]:
+    def get_posts(self, start_date: datetime = None, count2load: int = None, **params) -> Dict[str, Any]:
         """
         Parse posts with wall.get method
         https://dev.vk.com/method/wall.get
@@ -182,6 +181,8 @@ class Wall(Base):
         data : Dict[str, Union[Optional[List[Any]], Any]]
 
         """
+        if start_date is None and count2load is None:
+            raise ValueError('Specify start_date or count2load')
         if 'owner_id' in params:
             id_ = {'owner_id': params['owner_id']}
         else:
@@ -193,9 +194,13 @@ class Wall(Base):
         if params['extended']:
             data |= {'profiles': [], 'groups': []}
         steps = min(count2load, total_count)
-        pbar = tqdm(total=steps)
+        pbar = tqdm(total=steps, position=0, leave=True)
         while data['loaded_count'] < count2load and data['loaded_count'] < total_count:
-            curr_data = self.api_request("wall.get", params)
+            try:
+                curr_data = self.api_request("wall.get", params)
+            except (VKError, NotIncreaseError, ConnectionResetError) as e:
+                print(f'{e}')
+                return data
             data['total_count'] = curr_data['count']
             data['items'].extend(curr_data['items'])
             if params['extended']:
@@ -205,7 +210,7 @@ class Wall(Base):
             pbar.update(len(data['items']) - data['loaded_count'])
             data['loaded_count'] = len(data['items'])
             last_post_date = datetime.utcfromtimestamp(data['items'][-1]['date'])
-            if last_post_date < start_date:
+            if start_date and last_post_date < start_date:
                 data['items'] = list(self._cut_posts_by_date(data['items'], start_date))
                 pbar.update(steps)
                 break
@@ -424,7 +429,26 @@ class User(Wall, Likes):
     @Base.add_base_params(fields=', '.join(Base.base_user_fields))
     def get_page_data(self, **params) -> Dict:
         """
-        Получить информацию о пользователе
+        Returns extended user information.
+        https://dev.vk.com/method/users.get
+
+
+        Parameters
+        ----------
+        Comma-separated user IDs or their short names (screen_name). By default, it is the ID of the current user.
+        user_ids: str
+
+        A list of additional profile fields that need to be returned.
+        https://dev.vk.com/reference/objects/user
+        fields: str
+
+        The case for declension of the user's first and last name.
+        https://dev.vk.com/method/users.get
+        name_case: str
+
+        Returns
+        -------
+        data: Dict[str, Any]
 
         """
         return self.api_request("users.get", params)
@@ -577,7 +601,7 @@ class Group(Wall, Likes):
             data['members'].extend(curr_data['items'])
             data['loaded_count'] = len(data['members'])
             params['offset'] += params['count']
-            increase = len(data['members']) - data['loaded_count']
+            increase = len(curr_data['items'])
             pbar.update(increase)
         pbar.close()
         return data
