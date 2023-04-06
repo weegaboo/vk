@@ -456,13 +456,17 @@ class User(Wall, Likes):
     @Base.add_base_params(count=1000, offset=0, fields=', '.join(Base.base_user_fields))
     def get_followers(self, **params) -> Dict[str, Any]:
         """
-
+        Returns a list of user IDs that are subscribers of the user.
+        https://dev.vk.com/method/users.getFollowers
 
         Parameters
         ----------
+        User ID.
+        user_id: int
 
         Returns
         -------
+        data: Dict[str, Any]
 
         """
         page_data = self.get_page_data(user_ids=params['user_id'])
@@ -485,6 +489,26 @@ class User(Wall, Likes):
             pbar.update(increase)
         pbar.close()
         return data
+
+    @Base.add_base_params(count=1000, offset=0, fields=', '.join(Base.base_user_fields))
+    def get_friends(self, **params) -> Dict[str, Any]:
+        """
+        Returns a list of the user's friend IDs or extended information about the user's friends
+        (when using the fields parameter).
+        https://dev.vk.com/method/friends.get
+
+        Parameters
+        ----------
+        ID of the user to get a list of friends for. If the parameter is omitted,
+        it is assumed that it is equal to the ID of the current user (valid for a call with access_token transmission).
+        user_id: int
+
+        Returns
+        -------
+        data: Dict[str, Any]
+
+        """
+        return self.api_request("friends.get", params)
 
 
 class Group(Wall, Likes):
