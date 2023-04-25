@@ -510,6 +510,30 @@ class User(Wall, Likes):
         """
         return self.api_request("friends.get", params)
 
+    @Base.add_base_params()
+    def get_mutual_friends(self, **params) -> Dict[str, Any]:
+        """
+        Returns a list of IDs of mutual friends between a pair of users.
+        https://dev.vk.com/method/friends.getMutualv
+
+        Parameters
+        ----------
+        The ID of the user whose friends overlap with the friends of the user with the target_uid identifier.
+        If the parameter is omitted, it is assumed that source_uid is equal to the ID of the current user.
+        source_uid: int
+
+        A list of user IDs with which to search for mutual friends.
+        target_uid: int
+
+        A list of user IDs with which to search for mutual friends.
+        target_uids: List[int]
+
+        Returns
+        -------
+        data: Dict[str, Any]
+
+        """
+        return self.api_request("friends.getMutual", params)
 
 class Group(Wall, Likes):
     """Vk groups parsing"""
