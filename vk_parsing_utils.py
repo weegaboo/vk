@@ -37,29 +37,29 @@ class Base(object):
     time = 0.33
     version = 5.131
 
-    def __init__(self, username: str, password: str):
+    def __init__(self, username: str, password: str, **kwargs):
         self.username = username
         self.password = password
-        self.access_token = self._get_access_token()
+        self.access_token = self._get_access_token(**kwargs)
         self.base_params = {'v': self.version, 'access_token': self.access_token}
 
-    def _get_init(self, **add):
+    def _get_init(self, **kwargs):
         params = {
             'grant_type': 'password',
             'client_id': self.client_id,
             'client_secret': self.client_secret,
             'username': self.username,
             'password': self.password,
-        } | add
+        } | kwargs
         request = requests.get("https://oauth.vk.com/token/", params=params)
         return request.json()
 
-    def _get_access_token(self) -> Union[str, Dict]:
+    def _get_access_token(self, **kwargs) -> Union[str, Dict]:
         """
         Получаем access_token
 
         """
-        request = self._get_init()
+        request = self._get_init(**kwargs)
         return request['access_token'] if 'access_token' in request.keys() else request
 
     def api_request(self, method: str, params: Dict) -> Dict:
@@ -105,8 +105,8 @@ class Wall(Base):
 
     """
 
-    def __init__(self, username: str, password: str):
-        super().__init__(username, password)
+    def __init__(self, username: str, password: str, **kwargs):
+        super().__init__(username, password, **kwargs)
 
     @staticmethod
     def _cut_posts_by_date(posts: List[Dict], start_date: datetime) -> Dict:
@@ -342,8 +342,8 @@ class Wall(Base):
 
 class Likes(Base):
 
-    def __init__(self, username: str, password: str):
-        super().__init__(username, password)
+    def __init__(self, username: str, password: str, **kwargs):
+        super().__init__(username, password, **kwargs)
 
     @Base.add_base_params(count=1000, offset=0, extended=1)
     def get_likes(self, count2load: int = 0, **params) -> Dict[str, Any]:
@@ -415,8 +415,8 @@ class User(Wall, Likes):
 
     """
 
-    def __init__(self, username: str, password: str):
-        super().__init__(username, password)
+    def __init__(self, username: str, password: str, **kwargs):
+        super().__init__(username, password, **kwargs)
 
     @Base.add_base_params()
     def find_user(self, **params) -> Dict:
@@ -538,8 +538,8 @@ class User(Wall, Likes):
 class Group(Wall, Likes):
     """Vk groups parsing"""
 
-    def __init__(self, username: str, password: str):
-        super().__init__(username, password)
+    def __init__(self, username: str, password: str, **kwargs):
+        super().__init__(username, password, **kwargs)
 
     @Base.add_base_params(fields='members_count')
     def get_group_data(self, **params) -> Dict[str, List[Dict]]:
@@ -657,5 +657,5 @@ class Group(Wall, Likes):
 
 class VK(User, Group):
 
-    def __init__(self, username: str, password: str):
-        super().__init__(username, password)
+    def __init__(self, username: str, password: str, **kwargs):
+        super().__init__(username, password, **kwargs)
