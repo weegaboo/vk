@@ -10,4 +10,4 @@ How to use:
 3) Check vk.access_token. if you need a captcha, pass additional parameters during reinitialization (https://dev.vk.com/api/captcha-error) \
    vk = VK(username, password, captcha_key, captcha_sid)
 
-4) Use VK class methods with additional params
+4) Use VK class methods with additional params. Check https://dev.vk.com/method
