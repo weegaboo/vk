@@ -3,7 +3,7 @@ VK parsing
 
 How to use:
 
-1) import VK from vk_parsing_utils
+1) from vk_parsing_utils import VK
 
 2) Init vk = VK(username, password)
 
