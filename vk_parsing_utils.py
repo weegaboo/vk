@@ -141,6 +141,33 @@ class Wall(Base):
         request = self.api_request("wall.get", params)
         return request['count']
 
+    @Base.add_base_params(fields=', '.join(Base.base_user_fields), extended=1)
+    def get_post_by_id(self, **params) -> Dict[str, Any]:
+        """
+        Parse posts with wall.getById method
+        https://dev.vk.com/method/wall.getById
+
+        Parameters
+        ----------
+        Comma-separated identifiers, which represent the IDs of the
+        owners of the walls and the IDs of the records on the wall themselves
+        going through the underscore. Maximum of 100 IDs.
+        Example of the posts value:
+        93388_21539,93388_20904,-1_340364
+        posts: str
+
+        1 — additional profiles and groups fields containing information about
+        users and communities will be returned in the response. By default: 1.
+        extended: int
+
+        Returns
+        -------
+        Returns a list of posts from the user's or community's wall.
+        data : Dict[str, Union[Optional[List[Any]], Any]]
+
+        """
+        return self.api_request("wall.getById", params)
+
     @Base.add_base_params(count=100, offset=0, fields=', '.join(Base.base_user_fields), extended=0)
     def get_posts(self, start_date: datetime = None, count2load: int = None, **params) -> Dict[str, Any]:
         """
