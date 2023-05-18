@@ -32,7 +32,8 @@ class Base(object):
         'bdate', 'city', 'contacts', 'followers_count',
         'country', 'domain', 'has_photo',
         'home_town', 'interests', 'personal',
-        'quotes', 'relation', 'sex', 'status'
+        'quotes', 'relation', 'sex', 'status',
+        'deactivated'
     ]
     time = 0.33
     version = 5.131
